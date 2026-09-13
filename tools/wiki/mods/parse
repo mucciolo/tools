@@ -241,7 +241,7 @@ __parse__() {
     }
 
     __parse_markdown() {
-        if [[ "$line" != *"\`"* && "$line" != *"*"* && "$line" != *"_"* && "$line" != *"+"* && "$line" != *"{"* && "$line" != *"["* && "$line" != *"<"* && "$line" != *"=="* ]]; then return; fi
+        if [[ "$line" != *"\`"* && "$line" != *"*"* && "$line" != *"_"* && "$line" != *"+"* && "$line" != *"{"* && "$line" != *"["* && "$line" != *"<"* && "$line" != *"=="* && "$line" != *"$"* ]]; then return; fi
         local -a masked_codes=()
         local m_idx=0
         __parse_pre
@@ -255,7 +255,7 @@ __parse__() {
         for (( i=0; i<m_idx; i++ )); do
             line="${line//%%MASKED_${i}%%/${masked_codes[$i]}}"
         done
-    }
+    }   
 
     __parse_block_field() {
         local _field_ref="$1"
