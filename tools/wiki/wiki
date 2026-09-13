@@ -499,55 +499,44 @@ FLAGS:
         local w_name="$1"
         shift || true
         local port="8080"
-        
         while [[ $# -gt 0 ]]; do
             case "$1" in
                 -p|--port) port="$2"; shift 2 ;;
                 *) shift ;;
             esac
         done
-
         if [[ -z "$w_name" ]]; then
             __log "No wiki specified." -t error -l wiki
             return 1
         fi
-
         local w_config="${WIKI_VARS[$w_name]:-}"
         if [[ -z "$w_config" ]]; then
             __log "Wiki '$w_name' is not configured." -t error -l wiki
             return 1
         fi
-
         local BUILDDIR=""
         local IFS=',' pair k v
         for pair in $w_config; do
             k="${pair%%:*}" v="${pair#*:}"
             [[ "$k" == "dist" ]] && BUILDDIR="$v"
         done
-
         if [[ -z "$BUILDDIR" || ! -d "$BUILDDIR" ]]; then
             __log "Wiki dist directory not found for '$w_name'." -t error -l wiki
             return 1
         fi
-
         __log "Serving '$w_name' ($BUILDDIR) on port $port... (Press Ctrl+C to stop)" -t info -l wiki
-
-        if command -v python3 >/dev/null 2>&1; then
-            (cd "$BUILDDIR" && python3 -m http.server "$port")
-        elif command -v python >/dev/null 2>&1; then
-            (cd "$BUILDDIR" && python -m SimpleHTTPServer "$port")
+        if command -v $_WIKI_DIR/bin/server >/dev/null 2>&1; then
+            (cd "$BUILDDIR" && $_WIKI_DIR/bin/server "$port")
+        
         elif command -v nc >/dev/null 2>&1; then
             __log "Python not found. Falling back to basic 'nc' server (Single-threaded)." -t info -l wiki
             (
                 cd "$BUILDDIR" || exit 1
-                
                 local pipe="/tmp/wiki_serve_$$"
                 trap 'rm -f "$pipe"' EXIT INT TERM
                 mkfifo "$pipe"
-                
                 local nc_cmd="nc -l $port"
                 nc -h 2>&1 | grep -q '\-p' && nc_cmd="nc -l -p $port"
-
                 while true; do
                     eval "$nc_cmd" < "$pipe" | (
                         read -r line
@@ -556,13 +545,11 @@ FLAGS:
                         req_path="${req_path%% *}"
                         [[ "$req_path" == "/" || -z "$req_path" ]] && req_path="/index.html"
                         local target=".${req_path}"
-                        
                         if [[ -f "$target" ]]; then
                             local mime="text/plain"
                             [[ "$target" == *".html" ]] && mime="text/html"
                             [[ "$target" == *".css" ]] && mime="text/css"
                             [[ "$target" == *".js" ]] && mime="application/javascript"
-                            
                             echo -ne "HTTP/1.1 200 OK\r\nContent-Type: $mime\r\n\r\n" > "$pipe"
                             cat "$target" > "$pipe"
                         else
@@ -572,7 +559,7 @@ FLAGS:
                 done
             )
         else
-            __log "Python or nc is required to serve files." -t error -l wiki
+            __log "neither server bin nor nc was found." -t error -l wiki
             return 1
         fi
     }
