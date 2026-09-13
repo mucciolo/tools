@@ -926,6 +926,21 @@ __blocks__() {
         content+="${html}"
     }
 
+    __block_tex() {
+        local bname="$1"
+        local -n _buffer_ref="$2"
+        
+        if [[ ${#_buffer_ref[@]} -eq 0 ]]; then return; fi
+        
+        local old_ifs="$IFS"
+        IFS=$'\n'
+        
+        local html="<tex>"$'\n'"${_buffer_ref[*]}"$'\n'"</tex>"$'\n'
+        
+        IFS="$old_ifs"
+        content+="${html}"
+    }
+
     __get_style_attr() {
         local b_width="$1" b_style="$2"
         local inline_style=""
