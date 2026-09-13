@@ -929,17 +929,18 @@ __blocks__() {
     __block_tex() {
         local bname="$1"
         local -n _buffer_ref="$2"
-        
-        if [[ ${#_buffer_ref[@]} -eq 0 ]]; then return; fi
-        
-        local old_ifs="$IFS"
-        IFS=$'\n'
-        
-        local html="<tex>"$'\n'"${_buffer_ref[*]}"$'\n'"</tex>"$'\n'
-        
-        IFS="$old_ifs"
-        content+="${html}"
-    }
+
+        (( ${#_buffer_ref[@]} == 0 )) && return 0
+
+        local IFS=$'\n'
+        local tex_content="${_buffer_ref[*]}"
+
+        local svg_output
+        svg_output=$("$_WIKI_DIR/bin/latex" --stdout --dpr 0.4 <<< "$tex_content")
+        svg_output="${svg_output//rgba(0,0,0,1)/var(--fg)}"
+
+        content+="<div class=\"latex\">"$'\n'"${svg_output}"$'\n'"</div>"$'\n'
+    }   
 
     __get_style_attr() {
         local b_width="$1" b_style="$2"

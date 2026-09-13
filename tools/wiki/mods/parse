@@ -46,18 +46,44 @@ __parse__() {
 
     __parse_inline() {
         if [[ "$line" == *"\`"* ]]; then
-            local code_re='`([^`]+)`'
+            local code_re='^([^`]*)\`([^\`]+)\`(.*)$'
             while [[ "$line" =~ $code_re ]]; do
-                local full="${BASH_REMATCH[0]}" code="${BASH_REMATCH[1]}"
-                code="${code//&/$_amp}"; code="${code//</$_lt}"; code="${code//>/$_gt}"
-                local old_line="$line"
+                local prefix="${BASH_REMATCH[1]}"
+                local code="${BASH_REMATCH[2]}"
+                local suffix="${BASH_REMATCH[3]}"
+                code="${code//&/$_amp}"
+                code="${code//</$_lt}"
+                code="${code//>/$_gt}"
                 masked_codes[$m_idx]="<inline>${code}</inline>"
-                line="${line/"$full"/%%MASKED_${m_idx}%%}"
+                line="${prefix}%%MASKED_${m_idx}%%${suffix}"
                 ((m_idx++))
-                if [[ "$line" == "$old_line" ]]; then break; fi
             done
         fi
+
+        if [[ "$line" == *"$"* ]]; then
+            local math_re='^([^$]*)\$([^$]+)\$(.*)$'
+            while [[ "$line" =~ $math_re ]]; do
+                local prefix="${BASH_REMATCH[1]}"
+                local math_code="${BASH_REMATCH[2]}"
+                local suffix="${BASH_REMATCH[3]}"
+                local svg_output
+                svg_output=$("$_WIKI_DIR/bin/latex" --stdout --inline --dpr 0.4 <<< "$math_code")
+                svg_output="${svg_output//rgba(0,0,0,1)/var(--fg)}"
+                
+                local min_y=0 height=0
+                if [[ "$svg_output" =~ viewBox=[\"\']([0-9.-]+)[[:space:],]+([0-9.-]+)[[:space:],]+([0-9.-]+)[[:space:],]+([0-9.-]+)[\"\'] ]]; then
+                    min_y="${BASH_REMATCH[2]}"
+                    height="${BASH_REMATCH[4]}"
+                fi
+                
+                masked_codes[$m_idx]="<span class=\"latex-inline\" style=\"vertical-align: calc(-10px);\">${svg_output}</span>"
+                line="${prefix}%%MASKED_${m_idx}%%${suffix}"
+                ((m_idx++))
+            done
+        fi
+        
     }
+   
 
     __parse_pre() {
         if [[ "$line" == *"<pre"* && "$line" == *"</pre>"* ]]; then
