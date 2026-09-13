@@ -213,8 +213,6 @@ __render__() {
         new_content+="$rem"
         content="$new_content"
 
-        content=$(printf "%s" "$content" | "$_WIKI_DIR/bin/mathml")
-        
         __search_index
         __render_template
         
