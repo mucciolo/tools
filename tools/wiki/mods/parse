@@ -56,7 +56,7 @@ __parse__() {
                 code="${code//</$_lt}"
                 code="${code//>/$_gt}"
                 masked_codes[$m_idx]="<inline>${code}</inline>"
-                line="${prefix}%%MASKED_${m_idx}\%\%${suffix}"
+                line="${prefix}%%MASKED_${m_idx}%%${suffix}"
                 ((m_idx++))
             done
             line="${line//$'\x1F'/\`}"
@@ -266,22 +266,19 @@ __parse__() {
         [[ -z "$_field_ref" ]] && return
         _field_ref="${_field_ref//$'\t'/    }"
         _field_ref="${_field_ref//$'\xC2\xA0'/ }"
-        
-        local tmp
+        local tmp nl=$'\n' cr=$'\r'
         while [[ "$_field_ref" != "$tmp" ]]; do
             tmp="$_field_ref"
-            _field_ref="${_field_ref#$'\n'}"
-            _field_ref="${_field_ref#$'\r'}"
-            _field_ref="${_field_ref\%$'\n'}"
-            _field_ref="${_field_ref\%$'\r'}"
+            _field_ref="${_field_ref#$nl}"
+            _field_ref="${_field_ref#$cr}"
+            _field_ref="${_field_ref%$nl}"
+            _field_ref="${_field_ref%$cr}"
             _field_ref="${_field_ref# }"
             _field_ref="${_field_ref% }"
         done
-        
         local base_indent=-1
         local check_line
         local ind_re='^([[:space:]]*)'
-        
         while IFS= read -r check_line; do
             if [[ -n "${check_line//[[:space:]]/}" ]]; then
                 [[ "$check_line" =~ $ind_re ]]
@@ -291,25 +288,22 @@ __parse__() {
                 fi
             fi
         done <<< "$_field_ref"
-        
         if (( base_indent > 0 )); then
             local stripped=""
             local l
             while IFS= read -r l || [[ -n "$l" ]]; do
                 if [[ -n "${l//[[:space:]]/}" ]]; then
-                    stripped+="${l:base_indent}"$'\n'
+                    stripped+="${l:base_indent}$nl"
                 else
-                    stripped+="$l"$'\n'
+                    stripped+="$l$nl"
                 fi
             done <<< "$_field_ref"
-            _field_ref="${stripped\%$'\n'}"
+            _field_ref="${stripped\%$nl}"
         fi
-        
         local out=""
         local in_inner=0 in_html_pre=0 list_depth=0 code_lang=""
         local prefix rest inner suffix
         local -a LIST_INDENTS=() LIST_TYPES=()
-        
         local block_cmd_re='^[[:space:]]*::[[:space:]]?(.*)$'
         local code_fence_re='^[[:space:]]*```([a-zA-Z0-9_+-]*)[[:space:]]*$'
         local list_item_re='^([[:space:]]*)([-*+]|[0-9]+\.)[[:space:]]+(.*)$'
@@ -317,11 +311,9 @@ __parse__() {
         local tag_re='(^|[^=])=([a-zA-Z0-9_-]+)=(.*)'
         local link_re='\[([^]]+)\]\(([^)]+)\)'
         local ext_re='^(.*)\.(md|markdown|MD|MARKDOWN)([ \t#].*)?$'
-        
         while IFS= read -r l || [[ -n "$l" ]]; do
             if (( in_inner == 0 )); then
                 [[ "$l" =~ $block_cmd_re ]] && l="${BASH_REMATCH[1]}"
-                
                 if [[ "$l" =~ $code_fence_re ]]; then
                     if (( list_depth > 0 )); then
                         while (( list_depth > 0 )); do
@@ -333,13 +325,13 @@ __parse__() {
                     fi
                     in_inner=1
                     code_lang="${BASH_REMATCH[1]}"
-                    out+="${out:+$'\n'}<pre><code class=\"language-${code_lang}\">"$'\n'
+                    out+="${out:+$nl}<pre><code class=\"language-${code_lang}\">$nl"
                 elif (( in_html_pre == 1 )); then
                     if [[ "$l" == *"</pre>"* ]]; then in_html_pre=0; fi
-                    out+="${out:+$'\n'}$l"
+                    out+="${out:+$nl}$l"
                 elif [[ "$l" == *"<pre"* && "$l" != *"</pre>"* ]]; then
                     in_html_pre=1
-                    out+="${out:+$'\n'}$l"
+                    out+="${out:+$nl}$l"
                 else
                     local is_list=0 indent="" marker=""
                     if [[ "$l" =~ $list_item_re ]]; then
@@ -417,13 +409,11 @@ __parse__() {
                             l="${l/"$full"/<a href=\"${l_href}\">${l_text}</a>}"
                         done
                     fi
-                    
                     local temp_line="$line"
                     line="$l"
                     __parse_refs
                     l="$line"
                     line="$temp_line"
-                    
                     if (( is_list == 1 )); then
                         local ltype="ul"
                         [[ "$marker" =~ $num_re ]] && ltype="ol"
@@ -450,7 +440,7 @@ __parse__() {
                             fi
                         fi
                     else
-                        out+="${out:+$'\n'}$l"
+                        out+="${out:+$nl}$l"
                     fi
                 fi
             else
@@ -459,11 +449,10 @@ __parse__() {
                     out+="</code></pre>"
                 else
                     l="${l//&/$_amp}"; l="${l//</$_lt}"; l="${l//>/$_gt}"
-                    out+="$l"$'\n'
+                    out+="$l$nl"
                 fi
             fi
         done <<< "$_field_ref"
-        
         if (( list_depth > 0 )); then
             while (( list_depth > 0 )); do
                 list_depth=$((list_depth - 1))
@@ -473,7 +462,8 @@ __parse__() {
             LIST_TYPES=()
         fi
         printf "%s" "$out"
-    }
+    }    
+
 
 
     __parse_code() {
