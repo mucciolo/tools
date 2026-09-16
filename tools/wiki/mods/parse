@@ -46,20 +46,24 @@ __parse__() {
 
     __parse_inline() {
         if [[ "$line" == *"\`"* ]]; then
-            local code_re='^([^`]*)\`([^\`]+)\`(.*)$'
-            while [[ "$line" =~ $code_re ]]; do
-                local prefix="${BASH_REMATCH[1]}"
-                local code="${BASH_REMATCH[2]}"
-                local suffix="${BASH_REMATCH[3]}"
+            line="${line//\\\`/$'\x1F'}"
+            while [[ "$line" == *\`*\`* ]]; do
+                local prefix="${line%%\`*}"
+                local rest="${line#*\`}"
+                local code="${rest%%\`*}"
+                local suffix="${rest#*\`}"
                 code="${code//&/$_amp}"
                 code="${code//</$_lt}"
                 code="${code//>/$_gt}"
                 masked_codes[$m_idx]="<inline>${code}</inline>"
-                line="${prefix}%%MASKED_${m_idx}%%${suffix}"
+                line="${prefix}%%MASKED_${m_idx}\%\%${suffix}"
                 ((m_idx++))
             done
+            line="${line//$'\x1F'/\`}"
         fi
+    }
 
+    __parse_tex() {
         if [[ "$line" == *"$"* ]]; then
             local math_re='^([^$]*)\$([^$]+)\$(.*)$'
             while [[ "$line" =~ $math_re ]]; do
@@ -69,21 +73,20 @@ __parse__() {
                 local svg_output
                 svg_output=$("$_WIKI_DIR/bin/latex" --stdout --inline --dpr 0.4 <<< "$math_code")
                 svg_output="${svg_output//rgba(0,0,0,1)/var(--fg)}"
-                
+
                 local min_y=0 height=0
                 if [[ "$svg_output" =~ viewBox=[\"\']([0-9.-]+)[[:space:],]+([0-9.-]+)[[:space:],]+([0-9.-]+)[[:space:],]+([0-9.-]+)[\"\'] ]]; then
                     min_y="${BASH_REMATCH[2]}"
                     height="${BASH_REMATCH[4]}"
                 fi
-                
+
                 masked_codes[$m_idx]="<span class=\"latex-inline\" style=\"vertical-align: calc(-10px);\">${svg_output}</span>"
                 line="${prefix}%%MASKED_${m_idx}%%${suffix}"
                 ((m_idx++))
             done
         fi
-        
     }
-   
+
 
     __parse_pre() {
         if [[ "$line" == *"<pre"* && "$line" == *"</pre>"* ]]; then
@@ -246,6 +249,7 @@ __parse__() {
         local m_idx=0
         __parse_pre
         __parse_inline
+        __parse_tex
         __parse_strong
         __parse_underline
         __parse_em
@@ -321,7 +325,7 @@ __parse__() {
                     out+="${out:+$'\n'}$l"
                 else
                     local is_list=0 indent="" marker=""
-                    if [[ "$l" =~ ^([[:space:]]*)([-*+]|[0-9]+\.)[[:space:]]+(.*)$ ]]; then
+                    if [[ "$l" =~ ^([[:space:]]*)([-*+]\vert{}[0-9]+\.)[[:space:]]+(.*)$ ]]; then
                         is_list=1
                         indent="${#BASH_REMATCH[1]}"
                         marker="${BASH_REMATCH[2]}"
@@ -342,15 +346,16 @@ __parse__() {
                         fi
                     fi
                     while [[ "$l" == *\*\**\*\** ]]; do
-                        prefix="${l%%\*\**}"; rest="${l#*\*\*}"
-                        inner="${rest%%\*\**}"; suffix="${rest#*\*\*}"
+                        prefix="${l\%\%\*\**}"; rest="${l#*\*\*}"
+                        inner="${rest\%\%\*\**}"; suffix="${rest#*\*\*}"
                         l="${prefix}<strong>${inner}</strong>${suffix}"
                     done
                     while [[ "$l" == *_*_* ]]; do
-                        prefix="${l%%_*}"; rest="${l#*_}"
-                        inner="${rest%%_*}"; suffix="${rest#*_}"
+                        prefix="${l\%\%_*}"; rest="${l#*_}"
+                        inner="${rest\%\%_*}"; suffix="${rest#*_}"
                         l="${prefix}<em>${inner}</em>${suffix}"
                     done
+                    l="${l//\\\`/$'\x1F'}"
                     while [[ "$l" == *\`*\`* ]]; do
                         prefix="${l%%\`*}"; rest="${l#*\`}"
                         inner="${rest%%\`*}"; suffix="${rest#*\`}"
@@ -359,6 +364,7 @@ __parse__() {
                         inner="${inner//>/${_gt:-&gt;}}"
                         l="${prefix}<inline>${inner}</inline>${suffix}"
                     done
+                    l="${l//$'\x1F'/\`}"
                     while [[ "$l" == *"++"*"++"* ]]; do
                         local old_l="$l"
                         l="${l/\+\+/<ins>}"
@@ -388,7 +394,7 @@ __parse__() {
                         while [[ "$l" =~ $link_re ]]; do
                             local full="${BASH_REMATCH[0]}" l_text="${BASH_REMATCH[1]}" l_href="${BASH_REMATCH[2]}"
                             if [[ "$l_href" != http://* && "$l_href" != https://* ]]; then
-                                if [[ "$l_href" =~ ^(.*)\.(md|markdown|MD|MARKDOWN)([ \t#].*)?$ ]]; then
+                                if [[ "$l_href" =~ ^(.*)\.(md\vert{}markdown\vert{}MD\vert{}MARKDOWN)([ \t#].*)?$ ]]; then
                                     l_href="${BASH_REMATCH[1]}.html${BASH_REMATCH[3]}"
                                 fi
                             fi
@@ -449,8 +455,7 @@ __parse__() {
             LIST_TYPES=()
         fi
         printf "%s" "$out"
-    }
-
+    }   
 
     __parse_code() {
         if (( in_code_block == 1 )); then
