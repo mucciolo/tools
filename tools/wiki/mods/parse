@@ -271,21 +271,25 @@ __parse__() {
             tmp="$_field_ref"
             _field_ref="${_field_ref#$'\n'}"
             _field_ref="${_field_ref#$'\r'}"
-            _field_ref="${_field_ref%$'\n'}"
-            _field_ref="${_field_ref%$'\r'}"
+            _field_ref="${_field_ref\%$'\n'}"
+            _field_ref="${_field_ref\%$'\r'}"
             _field_ref="${_field_ref% }"
         done
+        
         local base_indent=-1
         local check_line
+        local ind_re='^([[:space:]]*)'
+        
         while IFS= read -r check_line; do
             if [[ -n "${check_line//[[:space:]]/}" ]]; then
-                [[ "$check_line" =~ ^([[:space:]]*) ]]
+                [[ "$check_line" =~ $ind_re ]]
                 local ind="${#BASH_REMATCH[1]}"
                 if (( base_indent == -1 || ind < base_indent )); then
                     base_indent=$ind
                 fi
             fi
         done <<< "$_field_ref"
+        
         if (( base_indent > 0 )); then
             local stripped=""
             local l
@@ -296,16 +300,27 @@ __parse__() {
                     stripped+="$l"$'\n'
                 fi
             done <<< "$_field_ref"
-            _field_ref="${stripped%$'\n'}"
+            _field_ref="${stripped\%$'\n'}"
         fi
+        
         local out=""
         local in_inner=0 in_html_pre=0 list_depth=0 code_lang=""
         local prefix rest inner suffix
         local -a LIST_INDENTS=() LIST_TYPES=()
+        
+        local block_cmd_re='^[[:space:]]*::[[:space:]]?(.*)$'
+        local code_fence_re='^[[:space:]]*```([a-zA-Z0-9_+-]*)[[:space:]]*$'
+        local list_item_re='^([[:space:]]*)([-*+]|[0-9]+\.)[[:space:]]+(.*)$'
+        local num_re='^[0-9]'
+        local tag_re='(^|[^=])=([a-zA-Z0-9_-]+)=(.*)'
+        local link_re='\[([^]]+)\]\(([^)]+)\)'
+        local ext_re='^(.*)\.(md|markdown|MD|MARKDOWN)([ \t#].*)?$'
+        
         while IFS= read -r l || [[ -n "$l" ]]; do
             if (( in_inner == 0 )); then
-                [[ "$l" =~ ^[[:space:]]*::[[:space:]]?(.*)$ ]] && l="${BASH_REMATCH[1]}"
-                if [[ "$l" =~ ^[[:space:]]*\`\`\`([a-zA-Z0-9_+-]*)[[:space:]]*$ ]]; then
+                [[ "$l" =~ $block_cmd_re ]] && l="${BASH_REMATCH[1]}"
+                
+                if [[ "$l" =~ $code_fence_re ]]; then
                     if (( list_depth > 0 )); then
                         while (( list_depth > 0 )); do
                             list_depth=$((list_depth - 1))
@@ -325,7 +340,7 @@ __parse__() {
                     out+="${out:+$'\n'}$l"
                 else
                     local is_list=0 indent="" marker=""
-                    if [[ "$l" =~ ^([[:space:]]*)([-*+]\vert{}[0-9]+\.)[[:space:]]+(.*)$ ]]; then
+                    if [[ "$l" =~ $list_item_re ]]; then
                         is_list=1
                         indent="${#BASH_REMATCH[1]}"
                         marker="${BASH_REMATCH[2]}"
@@ -346,13 +361,13 @@ __parse__() {
                         fi
                     fi
                     while [[ "$l" == *\*\**\*\** ]]; do
-                        prefix="${l\%\%\*\**}"; rest="${l#*\*\*}"
-                        inner="${rest\%\%\*\**}"; suffix="${rest#*\*\*}"
+                        prefix="${l%%\*\**}"; rest="${l#*\*\*}"
+                        inner="${rest%%\*\**}"; suffix="${rest#*\*\*}"
                         l="${prefix}<strong>${inner}</strong>${suffix}"
                     done
                     while [[ "$l" == *_*_* ]]; do
-                        prefix="${l\%\%_*}"; rest="${l#*_}"
-                        inner="${rest\%\%_*}"; suffix="${rest#*_}"
+                        prefix="${l%%_*}"; rest="${l#*_}"
+                        inner="${rest%%_*}"; suffix="${rest#*_}"
                         l="${prefix}<em>${inner}</em>${suffix}"
                     done
                     l="${l//\\\`/$'\x1F'}"
@@ -372,7 +387,7 @@ __parse__() {
                         if [[ "$l" == "$old_l" ]]; then break; fi
                     done
                     if [[ "$l" == *"=="* ]]; then
-                        while [[ "$l" =~ (^|[^=])=([a-zA-Z0-9_-]+)=(.*) ]]; do
+                        while [[ "$l" =~ $tag_re ]]; do
                             local pre="${BASH_REMATCH[1]}"
                             local tag="${BASH_REMATCH[2]}"
                             local remainder="${BASH_REMATCH[3]}"
@@ -390,11 +405,10 @@ __parse__() {
                         done
                     fi
                     if [[ "$l" == *"["* && "$l" == *"]("* ]]; then
-                        local link_re='\[([^]]+)\]\(([^)]+)\)'
                         while [[ "$l" =~ $link_re ]]; do
                             local full="${BASH_REMATCH[0]}" l_text="${BASH_REMATCH[1]}" l_href="${BASH_REMATCH[2]}"
                             if [[ "$l_href" != http://* && "$l_href" != https://* ]]; then
-                                if [[ "$l_href" =~ ^(.*)\.(md\vert{}markdown\vert{}MD\vert{}MARKDOWN)([ \t#].*)?$ ]]; then
+                                if [[ "$l_href" =~ $ext_re ]]; then
                                     l_href="${BASH_REMATCH[1]}.html${BASH_REMATCH[3]}"
                                 fi
                             fi
@@ -407,9 +421,10 @@ __parse__() {
                     __parse_refs
                     l="$line"
                     line="$temp_line"
+                    
                     if (( is_list == 1 )); then
                         local ltype="ul"
-                        [[ "$marker" =~ ^[0-9] ]] && ltype="ol"
+                        [[ "$marker" =~ $num_re ]] && ltype="ol"
                         if (( list_depth == 0 )) || (( indent > LIST_INDENTS[list_depth-1] )); then
                             LIST_INDENTS[$list_depth]="$indent"
                             LIST_TYPES[$list_depth]="$ltype"
@@ -446,6 +461,7 @@ __parse__() {
                 fi
             fi
         done <<< "$_field_ref"
+        
         if (( list_depth > 0 )); then
             while (( list_depth > 0 )); do
                 list_depth=$((list_depth - 1))
@@ -455,7 +471,8 @@ __parse__() {
             LIST_TYPES=()
         fi
         printf "%s" "$out"
-    }   
+    }    
+
 
     __parse_code() {
         if (( in_code_block == 1 )); then
@@ -700,9 +717,17 @@ __parse__() {
     }  
 
     __parse_markers() {
-        if [[ "$line" =~ ^([[:space:]]*)([-*+]|[0-9]+\.)[[:space:]]+(.*)$ ]]; then
+        local marker_re='^([[:space:]]*)([-*+]|[0-9]+\.)[[:space:]]+(.*)$'
+        local num_re='^[0-9]'
+        local space_re='^[[:space:]]+'
+
+        if [[ "$line" =~ $marker_re ]]; then
             local indent="${#BASH_REMATCH[1]}" marker="${BASH_REMATCH[2]}" item_content="${BASH_REMATCH[3]}"
-            if [[ "$marker" =~ ^[0-9] ]]; then __parse_ol "$indent" "$item_content"; else __parse_ul "$indent" "$item_content"; fi
+            if [[ "$marker" =~ $num_re ]]; then 
+                __parse_ol "$indent" "$item_content"
+            else 
+                __parse_ul "$indent" "$item_content"
+            fi
             return 1
         else
             if (( list_depth > 0 )); then
@@ -711,11 +736,11 @@ __parse__() {
                     if [[ $was_empty -eq 0 ]]; then content+="<br><br>"$'\n'; was_empty=1; fi
                     return 0
                 fi
-                if [[ ! "$line" =~ ^[[:space:]]+ ]]; then __parse_list; fi
+                if [[ ! "$line" =~ $space_re ]]; then __parse_list; fi
             fi
         fi
         return 1
-    }
+    }   
 
     __parse_section() {
         if [[ "$line" =~ ^(@+)(\{([^}]+)\})?[[:space:]]*(.*)$ ]]; then
