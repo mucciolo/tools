@@ -1020,14 +1020,31 @@ __blocks__() {
             elif [[ "$current_key" == "style" ]]; then i_style="$current_val"; fi
         fi
         if [[ -n "$b_img" && "$b_img" != http://* && "$b_img" != https://* && "$b_img" != /* ]]; then
-            if [[ "$b_img" != *.* ]]; then
-                if [[ -f "$BUILDDIR/_assets/${b_img}.webp" ]]; then b_img="${b_img}.webp"
-                elif [[ -f "$BUILDDIR/_assets/${b_img}.png" ]]; then b_img="${b_img}.png"
-                elif [[ -f "$BUILDDIR/_assets/${b_img}.jpg" ]]; then b_img="${b_img}.jpg"
-                elif [[ -f "$BUILDDIR/_assets/${b_img}.jpeg" ]]; then b_img="${b_img}.jpeg"
-                fi
+            local target_dir=""
+            if [[ "$b_img" == "./"* ]]; then
+                local dir_path="${current_dir//./\/}"
+                [[ "$dir_path" == "/" ]] && dir_path=""
+                target_dir="${dir_path:+/$dir_path}"
+                b_img="${b_img#./}"
             fi
-            b_img="/_assets/${b_img}"
+            if [[ "$b_img" != *.* ]]; then
+                local ext=""
+                for e in webp png jpg jpeg; do
+                    if [[ -f "$BUILDDIR/_assets${target_dir}/${b_img}.${e}" ]]; then
+                        ext="$e"
+                        break
+                    fi
+                done
+                if [[ -n "$ext" && "$ext" != "webp" && ! -f "$BUILDDIR/_assets${target_dir}/${b_img}.webp" ]]; then
+                    if type cwebp >/dev/null 2>&1; then
+                        cwebp -q 80 "$BUILDDIR/_assets${target_dir}/${b_img}.${ext}" -o "$BUILDDIR/_assets${target_dir}/${b_img}.webp" >/dev/null 2>&1 && ext="webp"
+                    elif type convert >/dev/null 2>&1; then
+                        convert "$BUILDDIR/_assets${target_dir}/${b_img}.${ext}" -quality 80 "$BUILDDIR/_assets${target_dir}/${b_img}.webp" >/dev/null 2>&1 && ext="webp"
+                    fi
+                fi
+                [[ -n "$ext" ]] && b_img="${b_img}.${ext}"
+            fi
+            b_img="/_assets${target_dir}/${b_img}"
         fi
         if [[ -n "$b_align" ]]; then
             b_style="display: flex; flex-direction: column; align-items: ${b_align}; justify-content: ${b_align}; text-align: ${b_align}; ${b_style}"
@@ -1046,7 +1063,7 @@ __blocks__() {
         fi
         html+="</figure>"$'\n'
         content+="${html}"
-    }
+    }   
 
     __block_text() {
         local bname="$1"
