@@ -253,7 +253,6 @@ __parse__() {
         __parse_strong
         __parse_underline
         __parse_em
-        __parse_tag
         __parse_refs
         __parse_links
         for (( i=0; i<m_idx; i++ )); do
@@ -298,7 +297,7 @@ __parse__() {
                     stripped+="$l$nl"
                 fi
             done <<< "$_field_ref"
-            _field_ref="${stripped\%$nl}"
+            _field_ref="${stripped%$nl}"
         fi
         local out=""
         local in_inner=0 in_html_pre=0 list_depth=0 code_lang=""
@@ -308,7 +307,6 @@ __parse__() {
         local code_fence_re='^[[:space:]]*```([a-zA-Z0-9_+-]*)[[:space:]]*$'
         local list_item_re='^([[:space:]]*)([-*+]|[0-9]+\.)[[:space:]]+(.*)$'
         local num_re='^[0-9]'
-        local tag_re='(^|[^=])=([a-zA-Z0-9_-]+)=(.*)'
         local link_re='\[([^]]+)\]\(([^)]+)\)'
         local ext_re='^(.*)\.(md|markdown|MD|MARKDOWN)([ \t#].*)?$'
         while IFS= read -r l || [[ -n "$l" ]]; do
@@ -355,49 +353,38 @@ __parse__() {
                         fi
                     fi
                     while [[ "$l" == *\*\**\*\** ]]; do
-                        prefix="${l%%\*\**}"; rest="${l#*\*\*}"
-                        inner="${rest%%\*\**}"; suffix="${rest#*\*\*}"
+                        prefix="${l\%\%\*\**}"; rest="${l#*\*\*}"
+                        inner="${rest\%\%\*\**}"; suffix="${rest#*\*\*}"
                         l="${prefix}<strong>${inner}</strong>${suffix}"
                     done
                     while [[ "$l" == *_*_* ]]; do
-                        prefix="${l%%_*}"; rest="${l#*_}"
-                        inner="${rest%%_*}"; suffix="${rest#*_}"
+                        prefix="${l\%\%_*}"; rest="${l#*_}"
+                        inner="${rest\%\%_*}"; suffix="${rest#*_}"
                         l="${prefix}<em>${inner}</em>${suffix}"
                     done
                     l="${l//\\\`/$'\x1F'}"
+                    
+                    local -a m_codes=()
+                    local m_i=0
                     while [[ "$l" == *\`*\`* ]]; do
                         prefix="${l%%\`*}"; rest="${l#*\`}"
                         inner="${rest%%\`*}"; suffix="${rest#*\`}"
                         inner="${inner//&/${_amp:-&amp;}}"
                         inner="${inner//</${_lt:-&lt;}}"
                         inner="${inner//>/${_gt:-&gt;}}"
-                        l="${prefix}<inline>${inner}</inline>${suffix}"
+                        m_codes[$m_i]="<inline>${inner}</inline>"
+                        l="${prefix}%%MASK_${m_i}\%\%${suffix}"
+                        ((m_i++))
                     done
                     l="${l//$'\x1F'/\`}"
+                    
                     while [[ "$l" == *"++"*"++"* ]]; do
                         local old_l="$l"
                         l="${l/\+\+/<ins>}"
                         l="${l/\+\+/<\/ins>}"
                         if [[ "$l" == "$old_l" ]]; then break; fi
                     done
-                    if [[ "$l" == *"=="* ]]; then
-                        while [[ "$l" =~ $tag_re ]]; do
-                            local pre="${BASH_REMATCH[1]}"
-                            local tag="${BASH_REMATCH[2]}"
-                            local remainder="${BASH_REMATCH[3]}"
-                            if [[ "$remainder" != *"=="* ]]; then break; fi
-                            local content="${remainder%%==*}"
-                            local full="${pre}=${tag}=${content}=="
-                            local old_l="$l"
-                            l="${l/"$full"/${pre}<${tag}>${content}</${tag}>}"
-                            if [[ "$l" == "$old_l" ]]; then break; fi
-                        done
-                        while [[ "$l" == *"=="*"=="* ]]; do
-                            local old_l="$l"
-                            l="${l/==/<tag>}"; l="${l/==/<\/tag>}"
-                            if [[ "$l" == "$old_l" ]]; then break; fi
-                        done
-                    fi
+                    
                     if [[ "$l" == *"["* && "$l" == *"]("* ]]; then
                         while [[ "$l" =~ $link_re ]]; do
                             local full="${BASH_REMATCH[0]}" l_text="${BASH_REMATCH[1]}" l_href="${BASH_REMATCH[2]}"
@@ -409,6 +396,11 @@ __parse__() {
                             l="${l/"$full"/<a href=\"${l_href}\">${l_text}</a>}"
                         done
                     fi
+                    
+                    for (( i=0; i<m_i; i++ )); do
+                        l="${l//%%MASK_${i}%%/${m_codes[$i]}}"
+                    done
+                    
                     local temp_line="$line"
                     line="$l"
                     __parse_refs
@@ -463,6 +455,7 @@ __parse__() {
         fi
         printf "%s" "$out"
     }    
+
 
 
 
