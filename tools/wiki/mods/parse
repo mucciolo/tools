@@ -353,13 +353,13 @@ __parse__() {
                         fi
                     fi
                     while [[ "$l" == *\*\**\*\** ]]; do
-                        prefix="${l\%\%\*\**}"; rest="${l#*\*\*}"
-                        inner="${rest\%\%\*\**}"; suffix="${rest#*\*\*}"
+                        prefix="${l%%\*\**}"; rest="${l#*\*\*}"
+                        inner="${rest%%\*\**}"; suffix="${rest#*\*\*}"
                         l="${prefix}<strong>${inner}</strong>${suffix}"
                     done
                     while [[ "$l" == *_*_* ]]; do
-                        prefix="${l\%\%_*}"; rest="${l#*_}"
-                        inner="${rest\%\%_*}"; suffix="${rest#*_}"
+                        prefix="${l%%_*}"; rest="${l#*_}"
+                        inner="${rest%%_*}"; suffix="${rest#*_}"
                         l="${prefix}<em>${inner}</em>${suffix}"
                     done
                     l="${l//\\\`/$'\x1F'}"
@@ -373,7 +373,7 @@ __parse__() {
                         inner="${inner//</${_lt:-&lt;}}"
                         inner="${inner//>/${_gt:-&gt;}}"
                         m_codes[$m_i]="<inline>${inner}</inline>"
-                        l="${prefix}%%MASK_${m_i}\%\%${suffix}"
+                        l="${prefix}%%MASK_${m_i}%%${suffix}"
                         ((m_i++))
                     done
                     l="${l//$'\x1F'/\`}"
