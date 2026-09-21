@@ -424,8 +424,8 @@ FLAGS:
         
         local target="$1"; shift || true
         local rebuild=0
-        if [[ "$target" == "--rebuild" || -z "$target" ]]; then 
-            rebuild=1
+        if [[ "$target" == "--rebuild" || -z "$target" ]]; then
+             rebuild=1
             target="${WIKIS[0]:-}"
         fi
         
@@ -437,13 +437,14 @@ FLAGS:
                 -t|--templates|--template) o_tmpl="$2"; shift 2 ;;
                 -s|--static) o_stat="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift 2 ;;
                 -a|--assets) o_assets="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift 2 ;;
-                -C|--cache) 
-                    if [[ "$2" = /* ]]; then o_cache="$2"; else o_cache="$PWD/$2"; fi
+                -C|--cache)
+                     if [[ "$2" == /* ]]; then o_cache="$2"; else o_cache="$PWD/$2"; fi
                     shift 2 ;;
                 --rebuild) rebuild=1; shift ;;
                 *) shift ;;
             esac
         done
+        
         local w_name="${target%%.*}"
         local p_name=""
         if [[ "$target" == *.* ]]; then p_name="${target#*.}"; fi
@@ -456,6 +457,7 @@ FLAGS:
             __log "Wiki '$w_name' is not configured." -t error -l wiki
             return 1
         fi
+        
         local SOURCEDIR="" BUILDDIR="" TEMPLATEDIR="" STATICDIR="" ASSETSDIR=""
         local OIFS="$IFS"; IFS=','
         local pair k v
@@ -485,15 +487,17 @@ FLAGS:
         local cache_file="$cache_dir/build_cache"
         local tmpl_cache_file="$cache_dir/tmpl_cache"
         local force_rebuild=$rebuild
+        
         __build_init
         __build_cache
+        __build_assets
         __build_partials
         __build_main
         __build_search_index
         __build_defs_index
         __build_sitemap
         return 0
-    }
+    }   
 
     __wiki__.serve() {
         local w_name="$1"

@@ -165,46 +165,30 @@ __build__() {
             else _global_pages+=("${parts[0]}"); fi
         done
     }
-    
-    __build_cache() {
-        mkdir -p "$cache_dir" 2>/dev/null
-        local tmpl_hash=""
-        if [[ -d "$TEMPLATEDIR" ]]; then
-            tmpl_hash=$(find "$TEMPLATEDIR" -type f -exec cksum {} + | cksum | awk '{print $1 "_" $2}')
-        fi
-        local old_tmpl_hash=""
-        [[ -f "$tmpl_cache_file" ]] && old_tmpl_hash=$(cat "$tmpl_cache_file")
-        if [[ "$tmpl_hash" != "$old_tmpl_hash" ]]; then
-            force_rebuild=1
-            echo "$tmpl_hash" > "$tmpl_cache_file"
-            > "$cache_file"
-        fi
-        if [[ -z "$p_name" && $force_rebuild -eq 1 ]]; then
-            __log "Cleaning and preparing environment for '$w_name'..." -t info -l wiki
-            find "$BUILDDIR" -mindepth 1 -maxdepth 1 ! -name "$(basename "$cache_dir")" -exec rm -rf {} + 2>/dev/null || true
-        fi
-        
-        mkdir -p "$BUILDDIR/_static"
-        if [ -d "$STATICDIR" ]; then 
-            cp -r "$STATICDIR"/* "$BUILDDIR/_static/" 2>/dev/null || true
-        fi
 
+    __build_assets() {
         mkdir -p "$BUILDDIR/_assets"
-        if [ -d "$ASSETSDIR" ]; then
+        
+        if [[ -d "$ASSETSDIR" ]]; then
             cp -r "$ASSETSDIR"/* "$BUILDDIR/_assets/" 2>/dev/null || true
-            
+
             local s_globstar=0 s_nullglob=0
             shopt -q globstar && s_globstar=1 || shopt -s globstar
             shopt -q nullglob && s_nullglob=1 || shopt -s nullglob
-            
+
+            local img base
             for img in "$BUILDDIR/_assets/"**/*.*; do
                 [[ -f "$img" ]] || continue
-                
+
                 case "$img" in
                     *.[pP][nN][gG] | *.[jJ][pP][gG] | *.[jJ][pP][eE][gG])
-                        local base="${img%.*}"
+                        base="${img%.*}"
                         if [[ ! -f "${base}.webp" ]]; then
-                            if command -v cwebp >/dev/null 2>&1; then
+                            if [[ -x "$_WIKI_DIR/bin/cwebp" ]]; then
+                                "$_WIKI_DIR/bin/cwebp" -q 80 "$img" -o "${base}.webp" >/dev/null 2>&1
+                            elif [[ -x "$_WIKI_DIR/bin/cwep" ]]; then
+                                "$_WIKI_DIR/bin/cwep" -q 80 "$img" -o "${base}.webp" >/dev/null 2>&1
+                            elif command -v cwebp >/dev/null 2>&1; then
                                 cwebp -q 80 "$img" -o "${base}.webp" >/dev/null 2>&1
                             elif command -v convert >/dev/null 2>&1; then
                                 convert "$img" -quality 80 "${base}.webp" >/dev/null 2>&1
@@ -213,17 +197,42 @@ __build__() {
                         ;;
                 esac
             done
-            
+
             (( s_globstar == 0 )) && shopt -u globstar
             (( s_nullglob == 0 )) && shopt -u nullglob
         fi
+    }
+     
+    __build_cache() {
+        mkdir -p "$cache_dir" 2>/dev/null
+        local tmpl_hash=""
+        if [[ -d "$TEMPLATEDIR" ]]; then
+            tmpl_hash=$(find "$TEMPLATEDIR" -type f -exec cksum {} + | cksum | awk '{print $1 "_" $2}')
+        fi
+        local old_tmpl_hash=""
+        [[ -f "$tmpl_cache_file" ]] && old_tmpl_hash=$(<"$tmpl_cache_file")
+        if [[ "$tmpl_hash" != "$old_tmpl_hash" ]]; then
+            force_rebuild=1
+            printf "%s\n" "$tmpl_hash" > "$tmpl_cache_file"
+            > "$cache_file"
+        fi
+        if [[ -z "$p_name" && $force_rebuild -eq 1 ]]; then
+            __log "Cleaning and preparing environment for '$w_name'..." -t info -l wiki
+            find "$BUILDDIR" -mindepth 1 -maxdepth 1 ! -name "${cache_dir##*/}" -exec rm -rf {} + 2>/dev/null || true
+        fi
+        
+        mkdir -p "$BUILDDIR/_static"
+        if [[ -d "$STATICDIR" ]]; then
+             cp -r "$STATICDIR"/* "$BUILDDIR/_static/" 2>/dev/null || true
+        fi
         
         if [[ -f "$cache_file" ]]; then
-            while read -r h f; do
+            while IFS= read -r h f; do
                 [[ -n "$f" ]] && CACHE_HASHES["$f"]="$h"
             done < "$cache_file"
         fi
-    }   
+    }
+
 
     __build_partials() {
         __partial_featured
