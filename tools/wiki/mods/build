@@ -170,39 +170,58 @@ __build__() {
         mkdir -p "$BUILDDIR/_assets"
         
         if [[ -d "$ASSETSDIR" ]]; then
-            cp -r "$ASSETSDIR"/* "$BUILDDIR/_assets/" 2>/dev/null || true
-
-            local s_globstar=0 s_nullglob=0
-            shopt -q globstar && s_globstar=1 || shopt -s globstar
+            local s_nullglob=0
             shopt -q nullglob && s_nullglob=1 || shopt -s nullglob
 
-            local img base
-            for img in "$BUILDDIR/_assets/"**/*.*; do
-                [[ -f "$img" ]] || continue
+            local cwebp_bin=""
+            if [[ -f "$_WIKI_DIR/bin/cwep" ]]; then
+                cwebp_bin="$_WIKI_DIR/bin/cwep"
+                [[ -x "$cwebp_bin" ]] || chmod +x "$cwebp_bin" 2>/dev/null
+            elif [[ -f "$_WIKI_DIR/bin/cwebp" ]]; then
+                cwebp_bin="$_WIKI_DIR/bin/cwebp"
+                [[ -x "$cwebp_bin" ]] || chmod +x "$cwebp_bin" 2>/dev/null
+            elif command -v cwebp >/dev/null 2>&1; then
+                cwebp_bin="cwebp"
+            fi
 
-                case "$img" in
-                    *.[pP][nN][gG] | *.[jJ][pP][gG] | *.[jJ][pP][eE][gG])
-                        base="${img%.*}"
-                        if [[ ! -f "${base}.webp" ]]; then
-                            if [[ -x "$_WIKI_DIR/bin/cwebp" ]]; then
-                                "$_WIKI_DIR/bin/cwebp" -q 80 "$img" -o "${base}.webp" >/dev/null 2>&1
-                            elif [[ -x "$_WIKI_DIR/bin/cwep" ]]; then
-                                "$_WIKI_DIR/bin/cwep" -q 80 "$img" -o "${base}.webp" >/dev/null 2>&1
-                            elif command -v cwebp >/dev/null 2>&1; then
-                                cwebp -q 80 "$img" -o "${base}.webp" >/dev/null 2>&1
-                            elif command -v convert >/dev/null 2>&1; then
-                                convert "$img" -quality 80 "${base}.webp" >/dev/null 2>&1
-                            fi
-                        fi
-                        ;;
-                esac
-            done
+            _process_dir() {
+                local dir="${1%/}"
+                local img base
+                for img in "$dir"/*; do
+                    if [[ -d "$img" ]]; then
+                        _process_dir "$img"
+                    elif [[ -f "$img" ]]; then
+                        case "$img" in
+                            *.[pP][nN][gG] | *.[jJ][pP][gG] | *.[jJ][pP][eE][gG])
+                                base="${img%.*}"
+                                if [[ ! -f "${base}.webp" ]]; then
+                                    __log "Obtaining webp for: $img" -t info -l wiki
+                                    if [[ -n "$cwebp_bin" ]]; then
+                                        __log "using cwep..."
+                                        "$cwebp_bin" -q 80 "$img" -o "${base}.webp"
+                                    elif command -v convert >/dev/null 2>&1; then
+                                        __log "using convert..."
+                                        convert "$img" -quality 80 "${base}.webp" >/dev/null 2>&1
+                                    else
+                                        __error "aaaaaaaa"
+                                    fi
+                                fi
+                                ;;
+                        esac
+                    fi
+                done
+            }
 
-            (( s_globstar == 0 )) && shopt -u globstar
+            _process_dir "$ASSETSDIR"
+
+            cp -r "${ASSETSDIR%/}"/* "$BUILDDIR/_assets/" 2>/dev/null || true
+
             (( s_nullglob == 0 )) && shopt -u nullglob
         fi
-    }
-     
+    } 
+
+
+
     __build_cache() {
         mkdir -p "$cache_dir" 2>/dev/null
         local tmpl_hash=""
@@ -223,7 +242,7 @@ __build__() {
         
         mkdir -p "$BUILDDIR/_static"
         if [[ -d "$STATICDIR" ]]; then
-             cp -r "$STATICDIR"/* "$BUILDDIR/_static/" 2>/dev/null || true
+            cp -r "$STATICDIR"/* "$BUILDDIR/_static/" 2>/dev/null || true
         fi
         
         if [[ -f "$cache_file" ]]; then
