@@ -258,8 +258,8 @@ __parse__() {
         for (( i=0; i<m_idx; i++ )); do
             line="${line//%%MASKED_${i}%%/${masked_codes[$i]}}"
         done
-    }
-
+    }   
+    
     __parse_block_field() {
         local _field_ref="$1"
         [[ -z "$_field_ref" ]] && return
@@ -352,8 +352,18 @@ __parse__() {
                             fi
                         fi
                     fi
-                    
+                    while [[ "$l" == *\*\**\*\** ]]; do
+                        prefix="${l%%\*\**}"; rest="${l#*\*\*}"
+                        inner="${rest%%\*\**}"; suffix="${rest#*\*\*}"
+                        l="${prefix}<strong>${inner}</strong>${suffix}"
+                    done
+                    while [[ "$l" == *_*_* ]]; do
+                        prefix="${l%%_*}"; rest="${l#*_}"
+                        inner="${rest%%_*}"; suffix="${rest#*_}"
+                        l="${prefix}<em>${inner}</em>${suffix}"
+                    done
                     l="${l//\\\`/$'\x1F'}"
+                    
                     local -a m_codes=()
                     local m_i=0
                     while [[ "$l" == *\`*\`* ]]; do
@@ -367,17 +377,6 @@ __parse__() {
                         ((m_i++))
                     done
                     l="${l//$'\x1F'/\`}"
-
-                    while [[ "$l" == *\*\**\*\** ]]; do
-                        prefix="${l%%\*\**}"; rest="${l#*\*\*}"
-                        inner="${rest%%\*\**}"; suffix="${rest#*\*\*}"
-                        l="${prefix}<strong>${inner}</strong>${suffix}"
-                    done
-                    while [[ "$l" == *_*_* ]]; do
-                        prefix="${l%%_*}"; rest="${l#*_}"
-                        inner="${rest%%_*}"; suffix="${rest#*_}"
-                        l="${prefix}<em>${inner}</em>${suffix}"
-                    done
                     
                     while [[ "$l" == *"++"*"++"* ]]; do
                         local old_l="$l"
@@ -455,7 +454,10 @@ __parse__() {
             LIST_TYPES=()
         fi
         printf "%s" "$out"
-    }
+    }    
+
+
+
 
     __parse_code() {
         if (( in_code_block == 1 )); then
