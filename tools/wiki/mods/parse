@@ -352,6 +352,22 @@ __parse__() {
                             fi
                         fi
                     fi
+                    
+                    l="${l//\\\`/$'\x1F'}"
+                    local -a m_codes=()
+                    local m_i=0
+                    while [[ "$l" == *\`*\`* ]]; do
+                        prefix="${l%%\`*}"; rest="${l#*\`}"
+                        inner="${rest%%\`*}"; suffix="${rest#*\`}"
+                        inner="${inner//&/${_amp:-&amp;}}"
+                        inner="${inner//</${_lt:-&lt;}}"
+                        inner="${inner//>/${_gt:-&gt;}}"
+                        m_codes[$m_i]="<inline>${inner}</inline>"
+                        l="${prefix}%%MASK${m_i}%%${suffix}"
+                        ((m_i++))
+                    done
+                    l="${l//$'\x1F'/\`}"
+
                     while [[ "$l" == *\*\**\*\** ]]; do
                         prefix="${l%%\*\**}"; rest="${l#*\*\*}"
                         inner="${rest%%\*\**}"; suffix="${rest#*\*\*}"
@@ -362,21 +378,6 @@ __parse__() {
                         inner="${rest%%_*}"; suffix="${rest#*_}"
                         l="${prefix}<em>${inner}</em>${suffix}"
                     done
-                    l="${l//\\\`/$'\x1F'}"
-                    
-                    local -a m_codes=()
-                    local m_i=0
-                    while [[ "$l" == *\`*\`* ]]; do
-                        prefix="${l%%\`*}"; rest="${l#*\`}"
-                        inner="${rest%%\`*}"; suffix="${rest#*\`}"
-                        inner="${inner//&/${_amp:-&amp;}}"
-                        inner="${inner//</${_lt:-&lt;}}"
-                        inner="${inner//>/${_gt:-&gt;}}"
-                        m_codes[$m_i]="<inline>${inner}</inline>"
-                        l="${prefix}%%MASK_${m_i}%%${suffix}"
-                        ((m_i++))
-                    done
-                    l="${l//$'\x1F'/\`}"
                     
                     while [[ "$l" == *"++"*"++"* ]]; do
                         local old_l="$l"
@@ -398,7 +399,7 @@ __parse__() {
                     fi
                     
                     for (( i=0; i<m_i; i++ )); do
-                        l="${l//%%MASK_${i}%%/${m_codes[$i]}}"
+                        l="${l//%%MASK${i}%%/${m_codes[$i]}}"
                     done
                     
                     local temp_line="$line"
@@ -455,9 +456,6 @@ __parse__() {
         fi
         printf "%s" "$out"
     }    
-
-
-
 
     __parse_code() {
         if (( in_code_block == 1 )); then
