@@ -246,7 +246,7 @@ __build__() {
         fi
         
         if [[ -f "$cache_file" ]]; then
-            while IFS= read -r h f; do
+            while IFS=' ' read -r h f; do
                 [[ -n "$f" ]] && CACHE_HASHES["$f"]="$h"
             done < "$cache_file"
         fi
