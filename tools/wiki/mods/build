@@ -365,7 +365,9 @@ __build__() {
                     [[ -f "$idx_f" ]] || continue
                     local bname="${idx_f##*_index_}"
                     bname="${bname%.json}"
-                    SEARCH_INDEX_MAP["$bname"]+=$(cat "$idx_f")
+                    local chunk=""
+                    IFS= read -r -d '' chunk < "$idx_f" || true
+                    SEARCH_INDEX_MAP["$bname"]+="$chunk"
                 done
                 __log "Skipped rendering $pagename (unmodified)" -t info -l wiki
                 continue
