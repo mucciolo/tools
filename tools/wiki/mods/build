@@ -539,15 +539,54 @@ __build__() {
         local xml_content="<?xml version=\"1.0\" encoding=\"UTF-8\"?>"$'\n'
         xml_content+="<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">"$'\n'
         
-        local p path loc
+        # Last commit date of each source keeps lastmod stable across builds and clones.
+        # Read once for the whole tree.
+        # Git paths are repo-root relative, so page paths are mapped the same way.
+        local -A commit_dates=() dirty=()
+        local line date="" git_top="" git_shallow="" src_key=""
+        { read -r git_top; read -r git_shallow; } < <(git -C "$SOURCEDIR" rev-parse --show-toplevel --is-shallow-repository 2>/dev/null)
+        if [[ "$git_shallow" == "true" ]]; then
+            __log "Shallow git clone: sitemap lastmod uses the build date." -t warning -l wiki
+        elif [[ -n "$git_top" ]] && src_key="$(cd "$SOURCEDIR" 2>/dev/null && pwd -P)" && [[ "$src_key" == "$git_top" || "$src_key" == "$git_top"/* ]]; then
+            src_key="${src_key#"$git_top"}"
+            src_key="${src_key#/}"
+            while IFS= read -r line; do
+                [[ -n "$line" ]] && dirty["$line"]=1
+            done < <(git -C "$git_top" -c core.quotepath=off diff --name-only HEAD -- "${src_key:-.}" 2>/dev/null)
+            # Log is newest first, so the first date seen for a file is its latest.
+            while IFS= read -r line; do
+                if [[ "$line" == ">"* ]]; then date="${line#>}"
+                elif [[ -n "$line" && -z "${commit_dates[$line]:-}" ]]; then commit_dates["$line"]="$date"
+                fi
+            done < <(git -C "$git_top" -c core.quotepath=off log --format='>%cd' --date=short --name-only -- "${src_key:-.}" 2>/dev/null)
+        fi
+        
+        local p path loc file lastmod p_vars
         for p in "${_pages[@]}"; do
             path="${p//./\/}.html"
             loc="${domain}/${path}"
             [[ "$path" == "index.html" ]] && loc="${domain}/"
             
+            file=""
+            p_vars="${WIKI_PAGE_VARS[${w_name}::${p}]:-}"
+            [[ "$p_vars" =~ (^|,)path:([^,]+) ]] && file="${BASH_REMATCH[2]}"
+            # Sources live under SOURCEDIR. Rebase them onto its repo-root relative path.
+            if [[ -n "$file" && "$file" == "$SOURCEDIR"/* ]]; then
+                file="${file#"$SOURCEDIR"/}"
+                [[ -n "$src_key" ]] && file="$src_key/$file"
+            else
+                file=""
+            fi
+            
+            # Uncommitted, untracked or non-git sources are being changed now, so use today.
+            lastmod="$current_date"
+            if [[ -n "$file" && -z "${dirty[$file]:-}" && -n "${commit_dates[$file]:-}" ]]; then
+                lastmod="${commit_dates[$file]}"
+            fi
+            
             xml_content+="  <url>"$'\n'
             xml_content+="    <loc>${loc}</loc>"$'\n'
-            xml_content+="    <lastmod>${current_date}</lastmod>"$'\n'
+            xml_content+="    <lastmod>${lastmod}</lastmod>"$'\n'
             xml_content+="  </url>"$'\n'
         done
         xml_content+="</urlset>"$'\n'
