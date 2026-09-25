@@ -270,10 +270,18 @@ __build__() {
         done
     }
 
+    # Rendered and skipped pages both merge here, so the first page in build order sets a block's title key.
+    __build_title_key() {
+        [[ -n "$2" && -z "${BLOCK_TITLE_KEYS[$1]:-}" ]] && BLOCK_TITLE_KEYS["$1"]="$2"
+        return 0
+    }
+
     __build_main() {
         if [[ -n "$p_name" ]]; then build_targets=("$p_name")
         else build_targets=("${_pages[@]}"); fi
         
+        # First line of each cached index file. Entries start with '{', so it cannot clash.
+        local title_key_header="title_key="
         # One cksum for all pages instead of one fork per page
         local -A file_hashes=()
         local -a hash_files=()
@@ -385,16 +393,31 @@ __build__() {
                 file_hash="${file_hash/ /_}"
             fi
             if [[ $force_rebuild -eq 0 && -n "$file_hash" && "${CACHE_HASHES[$file]:-}" == "$file_hash" && -f "$out_path" ]]; then
-                for idx_f in "$cache_dir"/${pagename}_index_*.json; do
+                # Every rendered page caches a page entry, so an index without the header predates it: render instead.
+                local -a replay_names=() replay_keys=() replay_chunks=()
+                local replay_ok=1
+                for idx_f in "$cache_dir/$pagename"_index_*.json; do
                     [[ -f "$idx_f" ]] || continue
                     local bname="${idx_f##*_index_}"
                     bname="${bname%.json}"
                     local chunk=""
                     IFS= read -r -d '' chunk < "$idx_f" || true
-                    SEARCH_INDEX_MAP["$bname"]+="$chunk"
+                    if [[ "$chunk" != "$title_key_header"* ]]; then replay_ok=0; break; fi
+                    local header="${chunk%%$'\n'*}"
+                    replay_names+=("$bname")
+                    replay_keys+=("${header#"$title_key_header"}")
+                    replay_chunks+=("${chunk#*$'\n'}")
                 done
-                __log "Skipped rendering $pagename (unmodified)" -t info -l wiki
-                continue
+                if (( replay_ok )); then
+                    local ri
+                    for ri in "${!replay_names[@]}"; do
+                        bname="${replay_names[$ri]}"
+                        SEARCH_INDEX_MAP["$bname"]+="${replay_chunks[$ri]}"
+                        __build_title_key "$bname" "${replay_keys[$ri]}"
+                    done
+                    __log "Skipped rendering $pagename (unmodified)" -t info -l wiki
+                    continue
+                fi
             fi
             mkdir -p "${out_path%/*}"
             
@@ -406,15 +429,29 @@ __build__() {
             local -A old_len_map=()
             for k in "${!SEARCH_INDEX_MAP[@]}"; do old_len_map["$k"]="${#SEARCH_INDEX_MAP[$k]}"; done
             
+            PAGE_TITLE_KEYS=()
             __render_main "$file" "$pagename" "$out_path" "$current_dir"
-            
+
+            local -A idx_written=()
             for k in "${!SEARCH_INDEX_MAP[@]}"; do
                 local old_len="${old_len_map[$k]:-0}"
                 local new_content="${SEARCH_INDEX_MAP[$k]:$old_len}"
                 if [[ -n "$new_content" ]]; then
-                    printf "%s" "$new_content" > "$cache_dir/${pagename}_index_${k}.json"
+                    local idx_path="$cache_dir/${pagename}_index_${k}.json"
+                    printf "%s%s\n%s" "$title_key_header" "${PAGE_TITLE_KEYS[$k]:-}" "$new_content" > "$idx_path"
+                    idx_written["$idx_path"]=1
+                    __build_title_key "$k" "${PAGE_TITLE_KEYS[$k]:-}"
                 fi
             done
+            # Block types the page no longer emits would be replayed on the next skip.
+            # Names with a second _index_ may belong to another page, so they are kept.
+            local -a idx_stale=()
+            for idx_f in "$cache_dir/$pagename"_index_*.json; do
+                [[ -f "$idx_f" && -z "${idx_written[$idx_f]:-}" ]] || continue
+                [[ "${idx_f#"$cache_dir/$pagename"_index_}" == *_index_* ]] && continue
+                idx_stale+=("$idx_f")
+            done
+            (( ${#idx_stale[@]} )) && rm -f -- "${idx_stale[@]}"
             CACHE_HASHES["$file"]="$file_hash"
         done
         local search_js="const SEARCH_CONFIG = ["
@@ -425,6 +462,7 @@ __build__() {
             local tkey="${BLOCK_TITLE_KEYS[$k]:-$k}"
             [[ "$k" == "page" ]] && tkey="pagename"
             [[ "$k" == "table" ]] && tkey="caption"
+            [[ "$k" == "tag" ]] && tkey="pagename"
             search_js+=" { id: '$k', others: ['${k}s'], titleKey: '$tkey', fallback: '$fallback' }"
             sf=0
         done
