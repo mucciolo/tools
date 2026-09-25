@@ -357,10 +357,9 @@ __build__() {
             fi
             local pagename="$p"
             local out_path="$BUILDDIR/${p//./\/}.html"
-            mkdir -p "${out_path%/*}"
-            
-            local file_hash=$(cksum "$file" | awk '{print $1 "_" $2}')
-            if [[ $force_rebuild -eq 0 && "${CACHE_HASHES[$file]:-}" == "$file_hash" && -f "$out_path" ]]; then
+            local file_hash=$(cksum < "$file")
+            file_hash="${file_hash/ /_}"
+            if [[ $force_rebuild -eq 0 && -n "$file_hash" && "${CACHE_HASHES[$file]:-}" == "$file_hash" && -f "$out_path" ]]; then
                 for idx_f in "$cache_dir"/${pagename}_index_*.json; do
                     [[ -f "$idx_f" ]] || continue
                     local bname="${idx_f##*_index_}"
@@ -372,6 +371,7 @@ __build__() {
                 __log "Skipped rendering $pagename (unmodified)" -t info -l wiki
                 continue
             fi
+            mkdir -p "${out_path%/*}"
             
             local RAW_LAYOUT
             read -r -d '' RAW_LAYOUT < "$page_tmpl_raw" || true
@@ -404,17 +404,20 @@ __build__() {
             sf=0
         done
         search_js+=" ];"
+        local search_marker="const SEARCH_CONFIG = ["
         for p in "${build_targets[@]}"; do
             local out_path="$BUILDDIR/${p//./\/}.html"
             if [[ -f "$out_path" ]]; then
                 local html_content
                 html_content="$(<"$out_path")"
+                # Last marker: the injected script follows any quoted in the page body.
+                local pre="${html_content%"$search_marker"*}"
                 if [[ "$html_content" == *"%%WIKI_SEARCH_CONFIG%%"* ]]; then
                     html_content="${html_content//%%WIKI_SEARCH_CONFIG%%/$search_js}"
                     printf "%s" "$html_content" > "$out_path"
-                elif [[ "$html_content" == *"const SEARCH_CONFIG = ["* ]]; then
-                    local pre="${html_content%%const SEARCH_CONFIG = \[*}"
-                    local post="${html_content#*const SEARCH_CONFIG = \[}"
+                elif (( ${#pre} < ${#html_content} )); then
+                    # Slice after pre: a leading-* glob trim is quadratic on large pages.
+                    local post="${html_content:${#pre}+${#search_marker}}"
                     post="${post#*\];}"
                     html_content="${pre}${search_js}${post}"
                     printf "%s" "$html_content" > "$out_path"
