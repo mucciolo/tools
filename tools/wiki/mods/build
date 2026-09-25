@@ -270,6 +270,12 @@ __build__() {
         done
     }
 
+    # Rendered and skipped pages both merge here, so the first page in build order sets a block's title key.
+    __build_title_key() {
+        [[ -n "$2" && -z "${BLOCK_TITLE_KEYS[$1]:-}" ]] && BLOCK_TITLE_KEYS["$1"]="$2"
+        return 0
+    }
+
     __build_main() {
         if [[ -n "$p_name" ]]; then build_targets=("$p_name")
         else build_targets=("${_pages[@]}"); fi
@@ -407,8 +413,7 @@ __build__() {
                     for ri in "${!replay_names[@]}"; do
                         bname="${replay_names[$ri]}"
                         SEARCH_INDEX_MAP["$bname"]+="${replay_chunks[$ri]}"
-                        # First writer in page order wins, as in a full build.
-                        [[ -n "${BLOCK_TITLE_KEYS[$bname]:-}" ]] || BLOCK_TITLE_KEYS["$bname"]="${replay_keys[$ri]}"
+                        __build_title_key "$bname" "${replay_keys[$ri]}"
                     done
                     __log "Skipped rendering $pagename (unmodified)" -t info -l wiki
                     continue
@@ -435,6 +440,7 @@ __build__() {
                     local idx_path="$cache_dir/${pagename}_index_${k}.json"
                     printf "%s%s\n%s" "$title_key_header" "${PAGE_TITLE_KEYS[$k]:-}" "$new_content" > "$idx_path"
                     idx_written["$idx_path"]=1
+                    __build_title_key "$k" "${PAGE_TITLE_KEYS[$k]:-}"
                 fi
             done
             # Block types the page no longer emits would be replayed on the next skip.
@@ -456,6 +462,7 @@ __build__() {
             local tkey="${BLOCK_TITLE_KEYS[$k]:-$k}"
             [[ "$k" == "page" ]] && tkey="pagename"
             [[ "$k" == "table" ]] && tkey="caption"
+            [[ "$k" == "tag" ]] && tkey="pagename"
             search_js+=" { id: '$k', others: ['${k}s'], titleKey: '$tkey', fallback: '$fallback' }"
             sf=0
         done

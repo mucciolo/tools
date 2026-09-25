@@ -140,9 +140,6 @@ __blocks__() {
         if [[ -z "${PAGE_TITLE_KEYS[$bname]:-}" ]]; then
             PAGE_TITLE_KEYS["$bname"]="${first_content_key:-${BLOCK_KEYS[0]}}"
         fi
-        if [[ -z "${BLOCK_TITLE_KEYS[$bname]:-}" ]]; then
-            BLOCK_TITLE_KEYS["$bname"]="${PAGE_TITLE_KEYS[$bname]}"
-        fi
         LIST_HTML_MAP["$bname"]+="<li><a href=\"#${anchor_id}\">${BLOCK_TITLE}</a></li>"$'\n'
         content+="${html}"
     }

@@ -143,8 +143,6 @@ __helper__() {
                 local enc_t="$(__json_escape "$t")"
                 SEARCH_INDEX_MAP["tag"]+="{\"url\":\"$enc_url\",\"tag\":\"$enc_t\",\"pagename\":\"$enc_pagename\"},"$'\n'
             done
-            BLOCK_TITLE_KEYS["tag"]="pagename"
-            PAGE_TITLE_KEYS["tag"]="pagename"
         fi
     }
 
