@@ -321,7 +321,7 @@ __blocks__() {
         local -a max_widths=()
         local j
         for (( j=0; j<num_columns; j++ )); do
-            max_widths[$j]=${#headers[$j]}
+            __char_len "${headers[$j]}"; max_widths[$j]=$REPLY
         done
         local -a parsed_rows=()
         for (( i=sep1+1; i<sep2; i++ )); do
@@ -347,7 +347,7 @@ __blocks__() {
                 cols[num_columns-1]="$last_col"
             fi
             for (( j=0; j<num_columns; j++ )); do
-                local flen=${#cols[$j]}
+                __char_len "${cols[$j]}"; local flen=$REPLY
                 if (( flen > max_widths[j] )); then
                     max_widths[$j]=$flen
                 fi
@@ -574,7 +574,8 @@ __blocks__() {
             local max_len=0
             local l_str
             for l_str in "${text_lines[@]}"; do
-                (( ${#l_str} > max_len )) && max_len=${#l_str}
+                __char_len "$l_str"
+                (( REPLY > max_len )) && max_len=$REPLY
             done
             local line_count=${#text_lines[@]}
             (( line_count == 0 )) && line_count=1
@@ -852,7 +853,8 @@ __blocks__() {
             local max_len=0
             local l_str
             for l_str in "${text_lines[@]}"; do
-                (( ${#l_str} > max_len )) && max_len=${#l_str}
+                __char_len "$l_str"
+                (( REPLY > max_len )) && max_len=$REPLY
             done
             local line_count=${#text_lines[@]}
             (( line_count == 0 )) && line_count=1

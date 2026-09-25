@@ -419,6 +419,8 @@ FLAGS:
     }
 
     __wiki__.build() {
+        # Byte semantics speed up string matching. Measure text with __char_len, not ${#var}.
+        local LC_ALL=C
         declare -gA SEARCH_INDEX_MAP=() LIST_HTML_MAP=() BLOCK_TITLE_KEYS=()
         declare -p WIKIS >/dev/null 2>&1 || declare -g -a WIKIS=()
         
