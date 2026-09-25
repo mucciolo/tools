@@ -17,6 +17,12 @@ __helper__() {
         echo "$s"
     }
 
+    # Counts characters, not bytes, so widths hold under LC_ALL=C: drops UTF-8 continuation bytes.
+    __char_len() {
+        local s="${1//[$'\x80'-$'\xbf']/}"
+        REPLY=${#s}
+    }
+
     __json_escape() {
         local s="$1"
         s="${s//\\/\\\\}"
