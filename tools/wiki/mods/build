@@ -393,6 +393,13 @@ __build__() {
                     IFS= read -r -d '' chunk < "$idx_f" || true
                     SEARCH_INDEX_MAP["$bname"]+="$chunk"
                 done
+                # Title keys are first-writer-wins in page order, so a skipped page replays its own to match a full build.
+                if [[ -f "$cache_dir/${pagename}_title_keys" ]]; then
+                    local tk_name tk_val
+                    while IFS='=' read -r tk_name tk_val; do
+                        [[ -n "${BLOCK_TITLE_KEYS[$tk_name]:-}" ]] || BLOCK_TITLE_KEYS["$tk_name"]="$tk_val"
+                    done < "$cache_dir/${pagename}_title_keys"
+                fi
                 __log "Skipped rendering $pagename (unmodified)" -t info -l wiki
                 continue
             fi
@@ -406,8 +413,16 @@ __build__() {
             local -A old_len_map=()
             for k in "${!SEARCH_INDEX_MAP[@]}"; do old_len_map["$k"]="${#SEARCH_INDEX_MAP[$k]}"; done
             
+            PAGE_TITLE_KEYS=()
             __render_main "$file" "$pagename" "$out_path" "$current_dir"
             
+            if (( ${#PAGE_TITLE_KEYS[@]} )); then
+                for k in "${!PAGE_TITLE_KEYS[@]}"; do
+                    printf '%s=%s\n' "$k" "${PAGE_TITLE_KEYS[$k]}"
+                done > "$cache_dir/${pagename}_title_keys"
+            else
+                rm -f "$cache_dir/${pagename}_title_keys"
+            fi
             for k in "${!SEARCH_INDEX_MAP[@]}"; do
                 local old_len="${old_len_map[$k]:-0}"
                 local new_content="${SEARCH_INDEX_MAP[$k]:$old_len}"
