@@ -113,9 +113,8 @@ __build__() {
             local fm_title="" fm_weight=""
             
             if [[ -f "$file" ]]; then
-                fm_title="$(__fm_val "$file" "title" || true)"
-                local raw_weight="$(__fm_val "$file" "weight" || true)"
-                [[ -n "$raw_weight" ]] && fm_weight="$raw_weight"
+                __fm_val_r "$file" "title" && fm_title="$REPLY"
+                __fm_val_r "$file" "weight" && [[ -n "$REPLY" ]] && fm_weight="$REPLY"
                 
                 local in_globals=0 g_line
                 while IFS= read -r g_line || [[ -n "$g_line" ]]; do
@@ -274,6 +273,29 @@ __build__() {
     __build_main() {
         if [[ -n "$p_name" ]]; then build_targets=("$p_name")
         else build_targets=("${_pages[@]}"); fi
+        
+        # One cksum for all pages instead of one fork per page
+        local -A file_hashes=()
+        local -a hash_files=()
+        for p in "${build_targets[@]}"; do
+            local p_vars="${WIKI_PAGE_VARS[${w_name}::${p}]:-}"
+            local file=""
+            local OIFS="$IFS"; IFS=','
+            for pair in $p_vars; do
+                local k="${pair%%:*}" v="${pair#*:}"
+                [[ "$k" == "path" ]] && file="$v"
+            done
+            IFS="$OIFS"
+            # cksum does not escape newlines in names; those fall back to a per-file cksum
+            [[ -f "$file" && "$file" != *$'\n'* ]] && hash_files+=("$file")
+        done
+        if (( ${#hash_files[@]} > 0 )); then
+            local h_crc h_size h_file
+            while IFS=' ' read -r h_crc h_size h_file; do
+                file_hashes["$h_file"]="${h_crc}_${h_size}"
+            done < <(cksum -- "${hash_files[@]}")
+        fi
+        
         for p in "${build_targets[@]}"; do
             local p_vars="${WIKI_PAGE_VARS[${w_name}::${p}]:-}"
             local file="" p_tmpl=""
@@ -357,8 +379,11 @@ __build__() {
             fi
             local pagename="$p"
             local out_path="$BUILDDIR/${p//./\/}.html"
-            local file_hash=$(cksum < "$file")
-            file_hash="${file_hash/ /_}"
+            local file_hash="${file_hashes[$file]:-}"
+            if [[ -z "$file_hash" ]]; then
+                file_hash=$(cksum < "$file")
+                file_hash="${file_hash/ /_}"
+            fi
             if [[ $force_rebuild -eq 0 && -n "$file_hash" && "${CACHE_HASHES[$file]:-}" == "$file_hash" && -f "$out_path" ]]; then
                 for idx_f in "$cache_dir"/${pagename}_index_*.json; do
                     [[ -f "$idx_f" ]] || continue
@@ -479,10 +504,12 @@ __build__() {
             [[ -z "$raw_id" ]] && raw_id="$term"
             [[ -z "$raw_id" ]] && continue
             
-            local clean_id="$(__slugify "$raw_id")"
+            __slugify_r "$raw_id"
+            local clean_id="$REPLY"
             local ref_key="$clean_id"
             if [[ -n "$context" && "$raw_id" != *.* ]]; then
-                ref_key="$(__slugify "${context}.${raw_id}")"
+                __slugify_r "${context}.${raw_id}"
+                ref_key="$REPLY"
             fi
             
             local -a rel_arr=()
@@ -497,7 +524,8 @@ __build__() {
                     r="${r%"${r##*[![:space:]]}"}"
                     r="${r#def.}"
                     if [[ -n "$r" ]]; then
-                        r="$(__slugify "$r")"
+                        __slugify_r "$r"
+                        r="$REPLY"
                         rel_arr+=("\"$r\"")
                     fi
                 done

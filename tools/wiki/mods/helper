@@ -5,6 +5,11 @@ __helper__() {
     declare -gA WIKIS WIKI_VARS WIKI_PAGES WIKI_PAGE_VARS WIKI_TEMPLATES WIKI_TEMPLATE_VARS WIKI_TOPICS WIKI_REFS WIKI_BLOCKS WIKI_AUTHORS 2>/dev/null || true
     
     __slugify() {
+        __slugify_r "$1"
+        echo "$REPLY"
+    }
+
+    __slugify_r() {
         local s="${1,,}"
         s="${s// /-}"
         s="${s// /a}"; s="${s// /a}"; s="${s// /a}"; s="${s// /a}"; s="${s// /a}"
@@ -14,7 +19,9 @@ __helper__() {
         s="${s// /u}"; s="${s// /u}"; s="${s// /u}"; s="${s// /u}"
         s="${s// /c}"; s="${s// /n}"
         s="${s//[^a-z0-9_.-]/}"
-        echo "$s"
+        # Slugs like -n or -ne used to be swallowed as echo options; keep them empty
+        [[ "$s" =~ ^-[neE]+$ ]] && s=""
+        REPLY="$s"
     }
 
     # Counts characters, not bytes, so widths hold under LC_ALL=C: drops UTF-8 continuation bytes.
